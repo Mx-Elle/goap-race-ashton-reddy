@@ -8,11 +8,11 @@ import pygame
 import pygame.locals
 
 from game_world.racetrack import RaceTrack, load_track
-from random_bot import random_move
+from random_bot import ashton_move
 import traceback
 
-TRACK = load_track("./tracks/no_choice.pkl")
-PLAYER = random_move
+TRACK = load_track("./tracks/complex_button.pkl")
+PLAYER = ashton_move
 REPLAY_SPEED = 1.0  # seconds per move in the replay. (lower is faster)
 SHOW_REPLAY = True
 
