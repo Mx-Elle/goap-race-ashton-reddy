@@ -8,12 +8,13 @@ import pygame
 import pygame.locals
 
 from game_world.racetrack import RaceTrack, load_track
-from random_bot import ashton_move
+from ashton_bot import ashton_move
+from random_bot import random_move
 import traceback
 
-TRACK = load_track("./tracks/complex_button.pkl")
+TRACK = load_track("./tracks/your_room.pkl")
 PLAYER = ashton_move
-REPLAY_SPEED = 1.0  # seconds per move in the replay. (lower is faster)
+REPLAY_SPEED = 0.5  # seconds per move in the replay. (lower is faster)
 SHOW_REPLAY = True
 
 
@@ -41,7 +42,7 @@ class Game:
         track: RaceTrack,
         time: float,
         delay: float,
-        max_turns_without_progress: int = 100,
+        max_turns_without_progress: int = 1000,
     ) -> None:
         self.player = player
         self.track = deepcopy(track)
@@ -154,6 +155,7 @@ def watch_replay(track: RaceTrack, history: list[Point], time_per_move: float):
         screen.blit(track_surface, (0, 0))
         pygame.draw.circle(screen, "#000000", (x, y), 0.2 * min(cell_w, cell_h))
         pygame.draw.circle(screen, "#FFFFFF", (x, y), 0.2 * min(cell_w, cell_h), 2)
+        
 
         for event in pygame.event.get():
             if event.type == pygame.locals.QUIT:
