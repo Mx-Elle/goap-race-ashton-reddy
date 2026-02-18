@@ -10,7 +10,13 @@ import numpy as np
 Point = tuple[int, int]
 
 def astar(start_cell: Point, end_cell: Point, track: RaceTrack) -> list[Point] | None:
-    safe = track.find_traversable_cells()
+    safe = {(int(r), int(c)) for (r, c) in track.find_traversable_cells()}
+
+    br, bc = np.where(track.buttons.astype(bool))
+    buttons = set(zip(br.astype(int), bc.astype(int)))
+
+    forbidden = buttons - {start_cell, end_cell}
+    safe -= forbidden
     #set up frontier as a list of tuples that include the priority value, a counter for tie-breaking, and the NavMeshCell
     frontier: list[tuple[float, int, Point]] = []
 
@@ -61,46 +67,64 @@ def astar(start_cell: Point, end_cell: Point, track: RaceTrack) -> list[Point] |
                 #add the current cell to the came_from dict 
                 came_from[neighbor] = current
     return None
-
 def plan_route(start: Point, track: RaceTrack) -> list[Point] | None:
-
     def state_key(pos: Point, t: RaceTrack) -> tuple[Point, bytes]:
+        pos = (int(pos[0]), int(pos[1]))
         return (pos, t.active.astype(np.int8).tobytes())
 
-    def helper(pos: Point, t: RaceTrack, seen: set[tuple[Point, bytes]]) -> list[Point] | None:
-        key = state_key(pos, t)
-        if key in seen:
-            return None
-        seen.add(key)
+    memo: dict[tuple[Point, bytes], tuple[int, list[Point]] | None] = {}
+    visiting: set[tuple[Point, bytes]] = set()
 
-        if astar(pos, t.target, t) is not None:
-            return [t.target]
+    def helper(pos: Point, t: RaceTrack) -> tuple[int, list[Point]] | None:
+        key = state_key(pos, t)
+
+
+        if key in memo:
+            return memo[key]
+
+
+        if key in visiting:
+            return None
+        visiting.add(key)
+
+        best: tuple[int, list[Point]] | None = None
+
+        path_to_target = astar(pos, t.target, t)
+        if path_to_target is not None:
+            best = (len(path_to_target) - 1, [t.target])
 
         candidates: list[tuple[int, Point]] = []
         for b in t.find_buttons():
-            b = (int(b[0]), int(b[1])) 
+            b = (int(b[0]), int(b[1]))
             path_to_b = astar(pos, b, t)
             if path_to_b is None:
                 continue
-            candidates.append((len(path_to_b), b))
+            candidates.append((len(path_to_b) - 1, b))
 
- 
-        candidates.sort(key=lambda x: x[0])
+        candidates.sort(key=lambda x: x[0])   
 
-        for _dist, b in candidates:
+        for dist_to_b, b in candidates:
             t2 = deepcopy(t)
             color = int(t2.button_colors[b[0], b[1]])
             t2.toggle(color)
 
-            print('next layer')
-            rest = helper(b, t2, seen)
-            if rest is not None:
-                return [b] + rest
+            sub = helper(b, t2)
+            if sub is None:
+                continue
 
-        return None
+            sub_cost, sub_route = sub
+            total_cost = dist_to_b + sub_cost
+            route = [b] + sub_route
 
-    return helper(start, track, seen=set())
+            if best is None or total_cost < best[0]:
+                best = (total_cost, route)
 
+        visiting.remove(key)
+        memo[key] = best
+        return best
+
+    result = helper(start, track)
+    return None if result is None else result[1]
 
 route: list[Point] | None = None 
 i: int = 0
