@@ -2,8 +2,10 @@ import random
 from game_world.racetrack import RaceTrack
 
 
+
 Point = tuple[int, int]
 
+         
 
 def random_move(loc: Point, track: RaceTrack) -> Point:
     safe = track.find_traversable_cells()
