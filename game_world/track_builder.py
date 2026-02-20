@@ -5,8 +5,8 @@ import pygame.locals
 
 from racetrack import RaceTrack, blank_track, load_track
 
-WIDTH = 600
-GRID_SIZE = (19, 19)
+WIDTH = 1000
+GRID_SIZE = (50, 50)
 # Where do you want to save this track? (Press 'enter' to save)
 SAVE_FILE_NAME = "tracks/your_room.pkl"
 STARTING_TRACK_NAME = None  # None if you want to start blank.

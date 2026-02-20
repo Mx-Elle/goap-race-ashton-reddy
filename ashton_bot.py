@@ -5,164 +5,117 @@ import math
 from copy import deepcopy
 import numpy as np
 
-
-
 Point = tuple[int, int]
+Stateid = tuple[Point, bytes]
 
-def astar(start_cell: Point, end_cell: Point, track: RaceTrack) -> list[Point] | None:
-    safe = {(int(r), int(c)) for (r, c) in track.find_traversable_cells()}
+moves = [(1, 0), (0, 1), (-1, 0), (0, -1)]
 
-    br, bc = np.where(track.buttons.astype(bool))
-    buttons = set(zip(br.astype(int), bc.astype(int)))
 
-    forbidden = buttons - {start_cell, end_cell}
-    safe -= forbidden
-    #set up frontier as a list of tuples that include the priority value, a counter for tie-breaking, and the NavMeshCell
-    frontier: list[tuple[float, int, Point]] = []
+def state_id(pos: Point, track: RaceTrack) -> Stateid:
+    # I identify each separate state uniquely
+    p = (int(pos[0]), int(pos[1]))
+    return (p, track.active.astype(np.int8).tobytes())
 
-    #essentially, the counter is just what is going to be compared when priorities are equal
-    counter = 1
-    heappush(frontier, (0.0, counter, start_cell))
-    came_from = dict()
-    cost_so_far = dict()
-    came_from[start_cell] = None
-    cost_so_far[start_cell] = 0
-    moves = [(1,0),(0,1),(-1,0),(0,-1)]
 
-    #loop through frontier as long as it isn't empty
+def distance(a: Point, b: Point) -> int:
+    # to get dist
+    return abs(int(a[0]) - int(b[0])) + abs(int(a[1]) - int(b[1]))
+
+
+def apply_button_if_present(pos: Point, track: RaceTrack) -> None:
+    # toggles track if bot is on button
+    p = (int(pos[0]), int(pos[1]))
+    if track.buttons[p]:
+        track.toggle(int(track.button_colors[p]))
+
+
+def astar_state_space(start: Point, track: RaceTrack) -> list[Point] | None:
+    # I am astaring through the open space to look for the best path I can find
+    new_track = deepcopy(track)
+    apply_button_if_present(start, new_track)
+
+    start_pos = (int(start[0]), int(start[1]))
+    goal = (int(new_track.target[0]), int(new_track.target[1]))
+
+    start_k = state_id(start_pos, new_track)
+
+    frontier = []
+    tie = 0
+
+    g_best = {start_k: 0}
+    parent = {start_k: None}
+
+    heappush(frontier, (distance(start_pos, goal), tie, 0, start_pos, new_track))
+
     while frontier:
-        #discard priority and count values of this cell in the frontier because we only need the cell itself
-        _priority, _count, current = heappop(frontier)
+        _, _, g, pos, t = heappop(frontier)
+        k = state_id(pos, t)
 
-        #if we've reached the end_cell, we know that this is the shortest path because we found it first
-        #go through came_from and add the path of cells to the list, eventually reversing it because we start from end_cell
-        if current == end_cell:
-            path = []
+        if g != g_best.get(k, 10**16):
+            continue
+
+        if pos == goal:
+            path: list[Point] = []
+            current: Stateid | None = k
             while current is not None:
-                path.append(current)
-                current = came_from[current]
+                path.append(current[0])
+                current = parent[current]
             path.reverse()
             return path
-        
+
+        safe = set()
+        for cell in t.find_traversable_cells():
+            r, c = cell
+            safe.add((int(r),int(c)))
+        #print(safe)
+
         for dr, dc in moves:
-            neighbor = (current[0] + dr, current[1] + dc)
-
-            if neighbor not in safe:
+            next = (pos[0] + dr, pos[1] + dc)
+            if next not in safe:
                 continue
 
-            #find the cost to get from start to the neighbor
-            new_cost = cost_so_far[current] + 1
-
-            #check if the neighbor either hasn't been visited or if it is cheaper to go there
-            if neighbor not in cost_so_far or new_cost < cost_so_far[neighbor]: 
-                cost_so_far[neighbor] = new_cost
-
-                #priority is the new cost added to the heuristic distance
-                priority = new_cost + (math.dist(neighbor,end_cell)) # f = g + h
-                counter+=1
-
-                #add this neighbor to the frontier heapk
-                heappush(frontier,(priority, counter, neighbor))
-
-                #add the current cell to the came_from dict 
-                came_from[neighbor] = current
-    return None
-def plan_route(start: Point, track: RaceTrack) -> list[Point] | None:
-    def state_key(pos: Point, t: RaceTrack) -> tuple[Point, bytes]:
-        pos = (int(pos[0]), int(pos[1]))
-        return (pos, t.active.astype(np.int8).tobytes())
-
-    memo: dict[tuple[Point, bytes], tuple[int, list[Point]] | None] = {}
-    visiting: set[tuple[Point, bytes]] = set()
-
-    def helper(pos: Point, t: RaceTrack) -> tuple[int, list[Point]] | None:
-        key = state_key(pos, t)
-
-
-        if key in memo:
-            return memo[key]
-
-
-        if key in visiting:
-            return None
-        visiting.add(key)
-
-        best: tuple[int, list[Point]] | None = None
-
-        path_to_target = astar(pos, t.target, t)
-        if path_to_target is not None:
-            best = (len(path_to_target) - 1, [t.target])
-
-        candidates: list[tuple[int, Point]] = []
-        for b in t.find_buttons():
-            b = (int(b[0]), int(b[1]))
-            path_to_b = astar(pos, b, t)
-            if path_to_b is None:
-                continue
-            candidates.append((len(path_to_b) - 1, b))
-
-        candidates.sort(key=lambda x: x[0])   
-
-        for dist_to_b, b in candidates:
             t2 = deepcopy(t)
-            color = int(t2.button_colors[b[0], b[1]])
-            t2.toggle(color)
+            apply_button_if_present(next, t2)
+            k2 = state_id(next, t2)
+            g2 = g + 1
 
-            sub = helper(b, t2)
-            if sub is None:
-                continue
+            if g2 < g_best.get(k2, 10**18):
+                g_best[k2] = g2
+                parent[k2] = k
+                tie += 1
+                f2 = g2 + distance(next, goal)
+                heappush(frontier, (f2, tie, g2, next, t2))
 
-            sub_cost, sub_route = sub
-            total_cost = dist_to_b + sub_cost
-            route = [b] + sub_route
+    return None
 
-            if best is None or total_cost < best[0]:
-                best = (total_cost, route)
+route = None
+i = 0
+planned = False
 
-        visiting.remove(key)
-        memo[key] = best
-        return best
-
-    result = helper(start, track)
-    return None if result is None else result[1]
-
-route: list[Point] | None = None 
-i: int = 0
-planned: bool = False
 
 def ashton_move(loc: Point, track: RaceTrack) -> Point:
+    # funtion to submit moves based on calculated path
     global route, i, planned
 
-
-    t_plan = deepcopy(track)
-    if t_plan.buttons[loc]:
-        t_plan.toggle(int(t_plan.button_colors[loc]))
-
-
     if not planned:
-        print("planing route")
-        route = plan_route(loc, t_plan)  
+        route = astar_state_space(loc, track)
         i = 0
         planned = True
 
-    if not route:
-        path = astar(loc, t_plan.target, t_plan)
-        if path and len(path) >= 2:
-            nxt = path[1]
-            return (nxt[0] - loc[0], nxt[1] - loc[1])
+    if not route or len(route) < 2:
+        planned = False
+        route = None
         return (0, 0)
 
-  
-    while i < len(route) and loc == route[i]:
+    loc = (int(loc[0]), int(loc[1]))
+
+    while i < len(route) and route[i] == loc:
         i += 1
 
-    goal = route[i] if i < len(route) else t_plan.target
+    if i >= len(route):
+        planned = False
+        route = None
+        return (0, 0)
 
-    path = astar(loc, goal, t_plan)
-    if path and len(path) >= 2:
-        nxt = path[1]
-        return (nxt[0] - loc[0], nxt[1] - loc[1])
-
-    planned = False
-    route = None
-    return (0, 0)
+    next = route[i]
+    return (int(next[0]) - loc[0], int(next[1]) - loc[1])

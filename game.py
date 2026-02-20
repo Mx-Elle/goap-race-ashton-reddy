@@ -12,9 +12,9 @@ from ashton_bot import ashton_move
 from random_bot import random_move
 import traceback
 
-TRACK = load_track("./tracks/your_room.pkl")
+TRACK = load_track("./tracks/complex_button.pkl")
 PLAYER = ashton_move
-REPLAY_SPEED = 0.1  # seconds per move in the replay. (lower is faster)
+REPLAY_SPEED = 0.01  # seconds per move in the replay. (lower is faster)
 SHOW_REPLAY = True
 
 
